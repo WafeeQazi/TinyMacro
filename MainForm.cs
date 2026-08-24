@@ -1,0 +1,87 @@
+namespace TinyMacro;
+
+public partial class MainForm : Form
+{
+    private Button _recordButton = null!;
+    private Button _stopButton = null!;
+    private Button _playButton = null!;
+    private Label _statusLabel = null!;
+    private Label _macroNameLabel = null!;
+
+    public MainForm()
+    {
+        InitializeComponent();
+    }
+
+    private void InitializeComponent()
+    {
+        Text = "TinyMacro";
+        ClientSize = new Size(240, 220);
+        FormBorderStyle = FormBorderStyle.FixedSingle;
+        MaximizeBox = false;
+        StartPosition = FormStartPosition.CenterScreen;
+
+        _macroNameLabel = new Label
+        {
+            Text = "Macro: Untitled",
+            AutoSize = false,
+            TextAlign = ContentAlignment.MiddleCenter,
+            Dock = DockStyle.Top,
+            Height = 30
+        };
+
+        _recordButton = new Button
+        {
+            Text = "● Record",
+            Dock = DockStyle.Top,
+            Height = 40
+        };
+        _recordButton.Click += OnRecordClicked;
+
+        _playButton = new Button
+        {
+            Text = "▶ Play",
+            Dock = DockStyle.Top,
+            Height = 40
+        };
+        _playButton.Click += OnPlayClicked;
+
+        _stopButton = new Button
+        {
+            Text = "■ Stop",
+            Dock = DockStyle.Top,
+            Height = 40
+        };
+        _stopButton.Click += OnStopClicked;
+
+        _statusLabel = new Label
+        {
+            Text = "Status: Idle",
+            AutoSize = false,
+            TextAlign = ContentAlignment.MiddleCenter,
+            Dock = DockStyle.Bottom,
+            Height = 40
+        };
+
+        Controls.Add(_stopButton);
+        Controls.Add(_playButton);
+        Controls.Add(_recordButton);
+        Controls.Add(_macroNameLabel);
+        Controls.Add(_statusLabel);
+    }
+
+    private void OnRecordClicked(object? sender, EventArgs e)
+    {
+        _statusLabel.Text = "Status: Recording...";
+    }
+
+    private void OnPlayClicked(object? sender, EventArgs e)
+    {
+        _statusLabel.Text = "Status: Playing...";
+    }
+
+    private void OnStopClicked(object? sender, EventArgs e)
+    {
+        _statusLabel.Text = "Status: Idle";
+    }
+}
