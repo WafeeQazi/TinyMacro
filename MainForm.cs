@@ -8,9 +8,13 @@ public partial class MainForm : Form
     private Label _statusLabel = null!;
     private Label _macroNameLabel = null!;
 
+    private readonly MouseHook _mouseHook = new();
+    private int _clickCount;
+
     public MainForm()
     {
         InitializeComponent();
+        _mouseHook.LeftClick += OnLeftClick;
     }
 
     private void InitializeComponent()
@@ -72,7 +76,9 @@ public partial class MainForm : Form
 
     private void OnRecordClicked(object? sender, EventArgs e)
     {
-        _statusLabel.Text = "Status: Recording...";
+        _clickCount = 0;
+        _statusLabel.Text = "Status: Recording... 0 clicks";
+        _mouseHook.Start();
     }
 
     private void OnPlayClicked(object? sender, EventArgs e)
@@ -82,6 +88,19 @@ public partial class MainForm : Form
 
     private void OnStopClicked(object? sender, EventArgs e)
     {
-        _statusLabel.Text = "Status: Idle";
+        _mouseHook.Stop();
+        _statusLabel.Text = $"Status: Idle ({_clickCount} clicks captured)";
+    }
+
+    private void OnLeftClick(Point location)
+    {
+        _clickCount++;
+        _statusLabel.Text = $"Status: Recording... {_clickCount} clicks";
+    }
+
+    protected override void OnFormClosed(FormClosedEventArgs e)
+    {
+        _mouseHook.Stop();
+        base.OnFormClosed(e);
     }
 }
