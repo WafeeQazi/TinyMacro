@@ -9,12 +9,15 @@ public partial class MainForm : Form
     private Label _macroNameLabel = null!;
 
     private readonly MouseHook _mouseHook = new();
+    private readonly KeyboardHook _keyboardHook = new();
     private int _clickCount;
+    private int _keyCount;
 
     public MainForm()
     {
         InitializeComponent();
         _mouseHook.LeftClick += OnLeftClick;
+        _keyboardHook.KeyDown += OnKeyDown;
     }
 
     private void InitializeComponent()
@@ -77,8 +80,10 @@ public partial class MainForm : Form
     private void OnRecordClicked(object? sender, EventArgs e)
     {
         _clickCount = 0;
-        _statusLabel.Text = "Status: Recording... 0 clicks";
+        _keyCount = 0;
+        UpdateRecordingStatus();
         _mouseHook.Start();
+        _keyboardHook.Start();
     }
 
     private void OnPlayClicked(object? sender, EventArgs e)
@@ -89,18 +94,31 @@ public partial class MainForm : Form
     private void OnStopClicked(object? sender, EventArgs e)
     {
         _mouseHook.Stop();
-        _statusLabel.Text = $"Status: Idle ({_clickCount} clicks captured)";
+        _keyboardHook.Stop();
+        _statusLabel.Text = $"Status: Idle ({_clickCount} clicks, {_keyCount} keys)";
     }
 
     private void OnLeftClick(Point location)
     {
         _clickCount++;
-        _statusLabel.Text = $"Status: Recording... {_clickCount} clicks";
+        UpdateRecordingStatus();
+    }
+
+    private void OnKeyDown(Keys key)
+    {
+        _keyCount++;
+        UpdateRecordingStatus();
+    }
+
+    private void UpdateRecordingStatus()
+    {
+        _statusLabel.Text = $"Status: Recording... {_clickCount} clicks, {_keyCount} keys";
     }
 
     protected override void OnFormClosed(FormClosedEventArgs e)
     {
         _mouseHook.Stop();
+        _keyboardHook.Stop();
         base.OnFormClosed(e);
     }
 }
