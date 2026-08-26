@@ -27,6 +27,7 @@ public partial class MainForm : Form
         FormBorderStyle = FormBorderStyle.FixedSingle;
         MaximizeBox = false;
         StartPosition = FormStartPosition.CenterScreen;
+        TopMost = true;
 
         _macroNameLabel = new Label
         {
