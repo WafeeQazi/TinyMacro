@@ -3,7 +3,6 @@ namespace TinyMacro;
 public partial class MainForm : Form
 {
     private Button _recordButton = null!;
-    private Button _stopButton = null!;
     private Button _playButton = null!;
     private Label _statusLabel = null!;
     private Label _macroNameLabel = null!;
@@ -12,6 +11,7 @@ public partial class MainForm : Form
     private readonly KeyboardHook _keyboardHook = new();
     private int _clickCount;
     private int _keyCount;
+    private bool _isRecording;
 
     public MainForm()
     {
@@ -44,7 +44,7 @@ public partial class MainForm : Form
             Dock = DockStyle.Top,
             Height = 40
         };
-        _recordButton.Click += OnRecordClicked;
+        _recordButton.Click += OnRecordButtonClicked;
 
         _playButton = new Button
         {
@@ -53,14 +53,6 @@ public partial class MainForm : Form
             Height = 40
         };
         _playButton.Click += OnPlayClicked;
-
-        _stopButton = new Button
-        {
-            Text = "■ Stop",
-            Dock = DockStyle.Top,
-            Height = 40
-        };
-        _stopButton.Click += OnStopClicked;
 
         _statusLabel = new Label
         {
@@ -71,32 +63,47 @@ public partial class MainForm : Form
             Height = 40
         };
 
-        Controls.Add(_stopButton);
         Controls.Add(_playButton);
         Controls.Add(_recordButton);
         Controls.Add(_macroNameLabel);
         Controls.Add(_statusLabel);
     }
 
-    private void OnRecordClicked(object? sender, EventArgs e)
+    private void OnRecordButtonClicked(object? sender, EventArgs e)
     {
+        if (_isRecording)
+        {
+            StopRecording();
+        }
+        else
+        {
+            StartRecording();
+        }
+    }
+
+    private void StartRecording()
+    {
+        _isRecording = true;
         _clickCount = 0;
         _keyCount = 0;
+        _recordButton.Text = "■ Stop";
         UpdateRecordingStatus();
         _mouseHook.Start();
         _keyboardHook.Start();
     }
 
-    private void OnPlayClicked(object? sender, EventArgs e)
+    private void StopRecording()
     {
-        _statusLabel.Text = "Status: Playing...";
-    }
-
-    private void OnStopClicked(object? sender, EventArgs e)
-    {
+        _isRecording = false;
+        _recordButton.Text = "● Record";
         _mouseHook.Stop();
         _keyboardHook.Stop();
         _statusLabel.Text = $"Status: Idle ({_clickCount} clicks, {_keyCount} keys)";
+    }
+
+    private void OnPlayClicked(object? sender, EventArgs e)
+    {
+        _statusLabel.Text = "Status: Playing...";
     }
 
     private void OnLeftClick(Point location)
@@ -113,7 +120,7 @@ public partial class MainForm : Form
 
     private void UpdateRecordingStatus()
     {
-        _statusLabel.Text = $"Status: Recording... {_clickCount} clicks, {_keyCount} keys";
+        _statusLabel.Text = $"Recording... {_clickCount} clicks, {_keyCount} keys";
     }
 
     protected override void OnFormClosed(FormClosedEventArgs e)
