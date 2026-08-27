@@ -1,3 +1,5 @@
+using System.Diagnostics;
+
 namespace TinyMacro;
 
 public partial class MainForm : Form
@@ -9,8 +11,9 @@ public partial class MainForm : Form
 
     private readonly MouseHook _mouseHook = new();
     private readonly KeyboardHook _keyboardHook = new();
-    private int _clickCount;
-    private int _keyCount;
+    private readonly List<MacroEvent> _recordedEvents = new();
+    private readonly Stopwatch _stopwatch = new();
+    private long _lastEventElapsedMs;
     private bool _isRecording;
 
     public MainForm()
@@ -84,8 +87,9 @@ public partial class MainForm : Form
     private void StartRecording()
     {
         _isRecording = true;
-        _clickCount = 0;
-        _keyCount = 0;
+        _recordedEvents.Clear();
+        _lastEventElapsedMs = 0;
+        _stopwatch.Restart();
         _recordButton.Text = "■ Stop";
         UpdateRecordingStatus();
         _mouseHook.Start();
@@ -98,7 +102,9 @@ public partial class MainForm : Form
         _recordButton.Text = "● Record";
         _mouseHook.Stop();
         _keyboardHook.Stop();
-        _statusLabel.Text = $"Status: Idle ({_clickCount} clicks, {_keyCount} keys)";
+        _stopwatch.Stop();
+        _statusLabel.Text = $"Status: Idle ({_recordedEvents.Count} events)";
+        ShowRecordedEvents();
     }
 
     private void OnPlayClicked(object? sender, EventArgs e)
@@ -108,19 +114,40 @@ public partial class MainForm : Form
 
     private void OnLeftClick(Point location)
     {
-        _clickCount++;
-        UpdateRecordingStatus();
+        RecordEvent(MacroEvent.Click(location.X, location.Y, ElapsedSinceLastEvent()));
     }
 
     private void OnKeyDown(Keys key)
     {
-        _keyCount++;
+        RecordEvent(MacroEvent.KeyPress(key, ElapsedSinceLastEvent()));
+    }
+
+    private long ElapsedSinceLastEvent()
+    {
+        var elapsed = _stopwatch.ElapsedMilliseconds;
+        var delay = elapsed - _lastEventElapsedMs;
+        _lastEventElapsedMs = elapsed;
+        return delay;
+    }
+
+    private void RecordEvent(MacroEvent macroEvent)
+    {
+        _recordedEvents.Add(macroEvent);
         UpdateRecordingStatus();
     }
 
     private void UpdateRecordingStatus()
     {
-        _statusLabel.Text = $"Recording... {_clickCount} clicks, {_keyCount} keys";
+        _statusLabel.Text = $"Recording... {_recordedEvents.Count} events";
+    }
+
+    private void ShowRecordedEvents()
+    {
+        if (_recordedEvents.Count == 0)
+            return;
+
+        var summary = string.Join(Environment.NewLine, _recordedEvents);
+        MessageBox.Show(summary, "Recorded Events (debug)");
     }
 
     protected override void OnFormClosed(FormClosedEventArgs e)
