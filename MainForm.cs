@@ -15,6 +15,8 @@ public partial class MainForm : Form
     private readonly Stopwatch _stopwatch = new();
     private long _lastEventElapsedMs;
     private bool _isRecording;
+    private bool _isPlaying;
+    private CancellationTokenSource? _playbackCts;
 
     public MainForm()
     {
@@ -55,7 +57,7 @@ public partial class MainForm : Form
             Dock = DockStyle.Top,
             Height = 40
         };
-        _playButton.Click += OnPlayClicked;
+        _playButton.Click += OnPlayButtonClicked;
 
         _statusLabel = new Label
         {
@@ -104,12 +106,61 @@ public partial class MainForm : Form
         _keyboardHook.Stop();
         _stopwatch.Stop();
         _statusLabel.Text = $"Status: Idle ({_recordedEvents.Count} events)";
-        ShowRecordedEvents();
     }
 
-    private void OnPlayClicked(object? sender, EventArgs e)
+    private async void OnPlayButtonClicked(object? sender, EventArgs e)
     {
+        if (_isPlaying)
+        {
+            _playbackCts?.Cancel();
+            return;
+        }
+
+        if (_recordedEvents.Count == 0)
+        {
+            MessageBox.Show("No macro recorded yet.", "TinyMacro");
+            return;
+        }
+
+        _isPlaying = true;
+        _playButton.Text = "■ Stop";
+        _recordButton.Enabled = false;
         _statusLabel.Text = "Status: Playing...";
+        _playbackCts = new CancellationTokenSource();
+
+        try
+        {
+            await PlaybackAsync(_playbackCts.Token);
+            _statusLabel.Text = "Status: Idle (playback finished)";
+        }
+        catch (OperationCanceledException)
+        {
+            _statusLabel.Text = "Status: Idle (playback stopped)";
+        }
+        finally
+        {
+            _isPlaying = false;
+            _playButton.Text = "▶ Play";
+            _recordButton.Enabled = true;
+        }
+    }
+
+    private async Task PlaybackAsync(CancellationToken token)
+    {
+        foreach (var macroEvent in _recordedEvents)
+        {
+            await Task.Delay((int)macroEvent.DelayMs, token);
+            token.ThrowIfCancellationRequested();
+
+            if (macroEvent.Type == MacroEventType.MouseClick)
+            {
+                MacroPlayer.MoveAndClick(macroEvent.X, macroEvent.Y);
+            }
+            else
+            {
+                MacroPlayer.SendKey(macroEvent.Key);
+            }
+        }
     }
 
     private void OnLeftClick(Point location)
@@ -141,19 +192,11 @@ public partial class MainForm : Form
         _statusLabel.Text = $"Recording... {_recordedEvents.Count} events";
     }
 
-    private void ShowRecordedEvents()
-    {
-        if (_recordedEvents.Count == 0)
-            return;
-
-        var summary = string.Join(Environment.NewLine, _recordedEvents);
-        MessageBox.Show(summary, "Recorded Events (debug)");
-    }
-
     protected override void OnFormClosed(FormClosedEventArgs e)
     {
         _mouseHook.Stop();
         _keyboardHook.Stop();
+        _playbackCts?.Cancel();
         base.OnFormClosed(e);
     }
 }
