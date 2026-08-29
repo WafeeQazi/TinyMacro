@@ -7,6 +7,10 @@ public partial class MainForm : Form
     private MenuStrip _menuStrip = null!;
     private Button _recordButton = null!;
     private Button _playButton = null!;
+    private Button _stopPlaybackButton = null!;
+    private Panel _repeatPanel = null!;
+    private NumericUpDown _repeatCountInput = null!;
+    private CheckBox _repeatForeverCheckbox = null!;
     private Label _statusLabel = null!;
     private Label _macroNameLabel = null!;
 
@@ -17,6 +21,7 @@ public partial class MainForm : Form
     private long _lastEventElapsedMs;
     private bool _isRecording;
     private bool _isPlaying;
+    private bool _isPaused;
     private CancellationTokenSource? _playbackCts;
     private string _macroName = "Untitled";
     private string? _currentFilePath;
@@ -26,12 +31,13 @@ public partial class MainForm : Form
         InitializeComponent();
         _mouseHook.LeftClick += OnLeftClick;
         _keyboardHook.KeyDown += OnKeyDown;
+        Deactivate += (sender, e) => TopMost = true;
     }
 
     private void InitializeComponent()
     {
         Text = "TinyMacro";
-        ClientSize = new Size(240, 250);
+        ClientSize = new Size(240, 280);
         FormBorderStyle = FormBorderStyle.FixedSingle;
         MaximizeBox = false;
         StartPosition = FormStartPosition.CenterScreen;
@@ -62,6 +68,49 @@ public partial class MainForm : Form
         };
         _playButton.Click += OnPlayButtonClicked;
 
+        _repeatPanel = new Panel
+        {
+            Dock = DockStyle.Top,
+            Height = 36
+        };
+
+        var repeatLabel = new Label
+        {
+            Text = "Repeat:",
+            Location = new Point(8, 10),
+            AutoSize = true
+        };
+
+        _repeatCountInput = new NumericUpDown
+        {
+            Location = new Point(70, 7),
+            Width = 55,
+            Minimum = 1,
+            Maximum = 9999,
+            Value = 1
+        };
+
+        _repeatForeverCheckbox = new CheckBox
+        {
+            Text = "Forever",
+            Location = new Point(135, 10),
+            AutoSize = true
+        };
+        _repeatForeverCheckbox.CheckedChanged += OnRepeatForeverChanged;
+
+        _repeatPanel.Controls.Add(repeatLabel);
+        _repeatPanel.Controls.Add(_repeatCountInput);
+        _repeatPanel.Controls.Add(_repeatForeverCheckbox);
+
+        _stopPlaybackButton = new Button
+        {
+            Text = "■ Stop Playback",
+            Dock = DockStyle.Top,
+            Height = 36,
+            Enabled = false
+        };
+        _stopPlaybackButton.Click += OnStopPlaybackClicked;
+
         _statusLabel = new Label
         {
             Text = "Status: Idle",
@@ -80,11 +129,18 @@ public partial class MainForm : Form
         _menuStrip.Items.Add(fileMenu);
         MainMenuStrip = _menuStrip;
 
+        Controls.Add(_stopPlaybackButton);
+        Controls.Add(_repeatPanel);
         Controls.Add(_playButton);
         Controls.Add(_recordButton);
         Controls.Add(_macroNameLabel);
         Controls.Add(_statusLabel);
         Controls.Add(_menuStrip);
+    }
+
+    private void OnRepeatForeverChanged(object? sender, EventArgs e)
+    {
+        _repeatCountInput.Enabled = !_repeatForeverCheckbox.Checked;
     }
 
     private void OnNewClicked(object? sender, EventArgs e)
@@ -181,11 +237,18 @@ public partial class MainForm : Form
         _statusLabel.Text = $"Status: Idle ({_recordedEvents.Count} events)";
     }
 
+    private void OnStopPlaybackClicked(object? sender, EventArgs e)
+    {
+        _playbackCts?.Cancel();
+    }
+
     private async void OnPlayButtonClicked(object? sender, EventArgs e)
     {
         if (_isPlaying)
         {
-            _playbackCts?.Cancel();
+            _isPaused = !_isPaused;
+            _playButton.Text = _isPaused ? "▶ Resume" : "⏸ Pause";
+            _statusLabel.Text = _isPaused ? "Status: Paused" : "Status: Playing...";
             return;
         }
 
@@ -196,8 +259,12 @@ public partial class MainForm : Form
         }
 
         _isPlaying = true;
-        _playButton.Text = "■ Stop";
+        _isPaused = false;
+        _playButton.Text = "⏸ Pause";
+        _stopPlaybackButton.Enabled = true;
         _recordButton.Enabled = false;
+        _repeatCountInput.Enabled = false;
+        _repeatForeverCheckbox.Enabled = false;
         _statusLabel.Text = "Status: Playing...";
         _playbackCts = new CancellationTokenSource();
 
@@ -213,26 +280,49 @@ public partial class MainForm : Form
         finally
         {
             _isPlaying = false;
+            _isPaused = false;
             _playButton.Text = "▶ Play";
+            _stopPlaybackButton.Enabled = false;
             _recordButton.Enabled = true;
+            _repeatCountInput.Enabled = !_repeatForeverCheckbox.Checked;
+            _repeatForeverCheckbox.Enabled = true;
         }
     }
 
     private async Task PlaybackAsync(CancellationToken token)
     {
-        foreach (var macroEvent in _recordedEvents)
-        {
-            await Task.Delay((int)macroEvent.DelayMs, token);
-            token.ThrowIfCancellationRequested();
+        var repeatForever = _repeatForeverCheckbox.Checked;
+        var repeatCount = (int)_repeatCountInput.Value;
+        var iteration = 0;
 
-            if (macroEvent.Type == MacroEventType.MouseClick)
+        while (repeatForever || iteration < repeatCount)
+        {
+            foreach (var macroEvent in _recordedEvents)
             {
-                MacroPlayer.MoveAndClick(macroEvent.X, macroEvent.Y);
+                await WaitWhilePausedAsync(token);
+                await Task.Delay((int)macroEvent.DelayMs, token);
+                token.ThrowIfCancellationRequested();
+                await WaitWhilePausedAsync(token);
+
+                if (macroEvent.Type == MacroEventType.MouseClick)
+                {
+                    MacroPlayer.MoveAndClick(macroEvent.X, macroEvent.Y);
+                }
+                else
+                {
+                    MacroPlayer.SendKey(macroEvent.Key);
+                }
             }
-            else
-            {
-                MacroPlayer.SendKey(macroEvent.Key);
-            }
+
+            iteration++;
+        }
+    }
+
+    private async Task WaitWhilePausedAsync(CancellationToken token)
+    {
+        while (_isPaused)
+        {
+            await Task.Delay(100, token);
         }
     }
 
