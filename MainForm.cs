@@ -4,6 +4,7 @@ namespace TinyMacro;
 
 public partial class MainForm : Form
 {
+    private MenuStrip _menuStrip = null!;
     private Button _recordButton = null!;
     private Button _playButton = null!;
     private Label _statusLabel = null!;
@@ -17,6 +18,8 @@ public partial class MainForm : Form
     private bool _isRecording;
     private bool _isPlaying;
     private CancellationTokenSource? _playbackCts;
+    private string _macroName = "Untitled";
+    private string? _currentFilePath;
 
     public MainForm()
     {
@@ -28,7 +31,7 @@ public partial class MainForm : Form
     private void InitializeComponent()
     {
         Text = "TinyMacro";
-        ClientSize = new Size(240, 220);
+        ClientSize = new Size(240, 250);
         FormBorderStyle = FormBorderStyle.FixedSingle;
         MaximizeBox = false;
         StartPosition = FormStartPosition.CenterScreen;
@@ -36,7 +39,7 @@ public partial class MainForm : Form
 
         _macroNameLabel = new Label
         {
-            Text = "Macro: Untitled",
+            Text = $"Macro: {_macroName}",
             AutoSize = false,
             TextAlign = ContentAlignment.MiddleCenter,
             Dock = DockStyle.Top,
@@ -68,10 +71,80 @@ public partial class MainForm : Form
             Height = 40
         };
 
+        _menuStrip = new MenuStrip();
+        var fileMenu = new ToolStripMenuItem("File");
+        fileMenu.DropDownItems.Add(new ToolStripMenuItem("New", null, OnNewClicked));
+        fileMenu.DropDownItems.Add(new ToolStripMenuItem("Open...", null, OnOpenClicked));
+        fileMenu.DropDownItems.Add(new ToolStripMenuItem("Save", null, OnSaveClicked));
+        fileMenu.DropDownItems.Add(new ToolStripMenuItem("Save As...", null, OnSaveAsClicked));
+        _menuStrip.Items.Add(fileMenu);
+        MainMenuStrip = _menuStrip;
+
         Controls.Add(_playButton);
         Controls.Add(_recordButton);
         Controls.Add(_macroNameLabel);
         Controls.Add(_statusLabel);
+        Controls.Add(_menuStrip);
+    }
+
+    private void OnNewClicked(object? sender, EventArgs e)
+    {
+        if (_isRecording || _isPlaying)
+            return;
+
+        _recordedEvents.Clear();
+        _macroName = "Untitled";
+        _currentFilePath = null;
+        _macroNameLabel.Text = $"Macro: {_macroName}";
+        _statusLabel.Text = "Status: Idle";
+    }
+
+    private void OnOpenClicked(object? sender, EventArgs e)
+    {
+        if (_isRecording || _isPlaying)
+            return;
+
+        using var dialog = new OpenFileDialog { Filter = "TinyMacro files (*.tmacro)|*.tmacro" };
+        if (dialog.ShowDialog() != DialogResult.OK)
+            return;
+
+        var data = MacroFile.Load(dialog.FileName);
+        _recordedEvents.Clear();
+        _recordedEvents.AddRange(data.Events);
+        _macroName = data.Name;
+        _currentFilePath = dialog.FileName;
+        _macroNameLabel.Text = $"Macro: {_macroName}";
+        _statusLabel.Text = $"Status: Idle ({_recordedEvents.Count} events loaded)";
+    }
+
+    private void OnSaveClicked(object? sender, EventArgs e)
+    {
+        if (_currentFilePath == null)
+        {
+            OnSaveAsClicked(sender, e);
+            return;
+        }
+
+        SaveToFile(_currentFilePath);
+    }
+
+    private void OnSaveAsClicked(object? sender, EventArgs e)
+    {
+        using var dialog = new SaveFileDialog { Filter = "TinyMacro files (*.tmacro)|*.tmacro", FileName = _macroName };
+        if (dialog.ShowDialog() != DialogResult.OK)
+            return;
+
+        _macroName = Path.GetFileNameWithoutExtension(dialog.FileName);
+        _currentFilePath = dialog.FileName;
+        _macroNameLabel.Text = $"Macro: {_macroName}";
+        SaveToFile(_currentFilePath);
+    }
+
+    private void SaveToFile(string path)
+    {
+        var data = new MacroData { Name = _macroName, Events = _recordedEvents };
+        MacroFile.Save(path, data);
+        _statusLabel.Text = $"Status: Saved ({_recordedEvents.Count} events)";
     }
 
     private void OnRecordButtonClicked(object? sender, EventArgs e)
