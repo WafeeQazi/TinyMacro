@@ -30,6 +30,9 @@ public partial class MainForm : Form
     {
         InitializeComponent();
         _mouseHook.LeftClick += OnLeftClick;
+        _mouseHook.MiddleClick += OnMiddleClick;
+        _mouseHook.RightClick += OnRightClick;
+        _mouseHook.Scroll += OnScroll;
         _keyboardHook.KeyDown += OnKeyDown;
         Deactivate += (sender, e) => TopMost = true;
     }
@@ -304,13 +307,23 @@ public partial class MainForm : Form
                 token.ThrowIfCancellationRequested();
                 await WaitWhilePausedAsync(token);
 
-                if (macroEvent.Type == MacroEventType.MouseClick)
+                switch (macroEvent.Type)
                 {
-                    MacroPlayer.MoveAndClick(macroEvent.X, macroEvent.Y);
-                }
-                else
-                {
-                    MacroPlayer.SendKey(macroEvent.Key);
+                    case MacroEventType.MouseClick:
+                        MacroPlayer.MoveAndClick(macroEvent.X, macroEvent.Y);
+                        break;
+                    case MacroEventType.MiddleClick:
+                        MacroPlayer.MoveAndMiddleClick(macroEvent.X, macroEvent.Y);
+                        break;
+                    case MacroEventType.RightClick:
+                        MacroPlayer.MoveAndRightClick(macroEvent.X, macroEvent.Y);
+                        break;
+                    case MacroEventType.Scroll:
+                        MacroPlayer.MoveAndScroll(macroEvent.X, macroEvent.Y, macroEvent.WheelDelta);
+                        break;
+                    default:
+                        MacroPlayer.SendKey(macroEvent.Key);
+                        break;
                 }
             }
 
@@ -329,6 +342,21 @@ public partial class MainForm : Form
     private void OnLeftClick(Point location)
     {
         RecordEvent(MacroEvent.Click(location.X, location.Y, ElapsedSinceLastEvent()));
+    }
+
+    private void OnMiddleClick(Point location)
+    {
+        RecordEvent(MacroEvent.MiddleClick(location.X, location.Y, ElapsedSinceLastEvent()));
+    }
+
+    private void OnRightClick(Point location)
+    {
+        RecordEvent(MacroEvent.RightClick(location.X, location.Y, ElapsedSinceLastEvent()));
+    }
+
+    private void OnScroll(Point location, int wheelDelta)
+    {
+        RecordEvent(MacroEvent.Scroll(location.X, location.Y, wheelDelta, ElapsedSinceLastEvent()));
     }
 
     private void OnKeyDown(Keys key)
