@@ -8,12 +8,37 @@ public static class MacroPlayer
     private const uint INPUT_KEYBOARD = 1;
     private const uint MOUSEEVENTF_LEFTDOWN = 0x0002;
     private const uint MOUSEEVENTF_LEFTUP = 0x0004;
+    private const uint MOUSEEVENTF_RIGHTDOWN = 0x0008;
+    private const uint MOUSEEVENTF_RIGHTUP = 0x0010;
+    private const uint MOUSEEVENTF_MIDDLEDOWN = 0x0020;
+    private const uint MOUSEEVENTF_MIDDLEUP = 0x0040;
+    private const uint MOUSEEVENTF_WHEEL = 0x0800;
     private const uint KEYEVENTF_KEYUP = 0x0002;
 
     public static void MoveAndClick(int x, int y)
     {
         SetCursorPos(x, y);
-        SendMouseClick();
+        SendMouseButton(MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP);
+    }
+
+    public static void MoveAndMiddleClick(int x, int y)
+    {
+        SetCursorPos(x, y);
+        SendMouseButton(MOUSEEVENTF_MIDDLEDOWN, MOUSEEVENTF_MIDDLEUP);
+    }
+
+    public static void MoveAndRightClick(int x, int y)
+    {
+        SetCursorPos(x, y);
+        SendMouseButton(MOUSEEVENTF_RIGHTDOWN, MOUSEEVENTF_RIGHTUP);
+    }
+
+    public static void MoveAndScroll(int x, int y, int wheelDelta)
+    {
+        SetCursorPos(x, y);
+        var inputs = new INPUT[1];
+        inputs[0] = CreateMouseInput(MOUSEEVENTF_WHEEL, (uint)wheelDelta);
+        SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<INPUT>());
     }
 
     public static void SendKey(Keys key)
@@ -24,22 +49,22 @@ public static class MacroPlayer
         SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<INPUT>());
     }
 
-    private static void SendMouseClick()
+    private static void SendMouseButton(uint downFlag, uint upFlag)
     {
         var inputs = new INPUT[2];
-        inputs[0] = CreateMouseInput(MOUSEEVENTF_LEFTDOWN);
-        inputs[1] = CreateMouseInput(MOUSEEVENTF_LEFTUP);
+        inputs[0] = CreateMouseInput(downFlag, 0);
+        inputs[1] = CreateMouseInput(upFlag, 0);
         SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<INPUT>());
     }
 
-    private static INPUT CreateMouseInput(uint flags)
+    private static INPUT CreateMouseInput(uint flags, uint mouseData)
     {
         return new INPUT
         {
             type = INPUT_MOUSE,
             u = new InputUnion
             {
-                mi = new MOUSEINPUT { dx = 0, dy = 0, mouseData = 0, dwFlags = flags, time = 0, dwExtraInfo = IntPtr.Zero }
+                mi = new MOUSEINPUT { dx = 0, dy = 0, mouseData = mouseData, dwFlags = flags, time = 0, dwExtraInfo = IntPtr.Zero }
             }
         };
     }
