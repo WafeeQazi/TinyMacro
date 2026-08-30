@@ -5,9 +5,15 @@ namespace TinyMacro;
 public class MouseHook
 {
     public event Action<Point>? LeftClick;
+    public event Action<Point>? MiddleClick;
+    public event Action<Point>? RightClick;
+    public event Action<Point, int>? Scroll;
 
     private const int WH_MOUSE_LL = 14;
     private const int WM_LBUTTONDOWN = 0x0201;
+    private const int WM_RBUTTONDOWN = 0x0204;
+    private const int WM_MBUTTONDOWN = 0x0207;
+    private const int WM_MOUSEWHEEL = 0x020A;
 
     private readonly LowLevelMouseProc _proc;
     private IntPtr _hookId = IntPtr.Zero;
@@ -38,10 +44,29 @@ public class MouseHook
 
     private IntPtr HookCallback(int nCode, IntPtr wParam, IntPtr lParam)
     {
-        if (nCode >= 0 && (int)wParam == WM_LBUTTONDOWN)
+        if (nCode >= 0)
         {
             var hookStruct = Marshal.PtrToStructure<MSLLHOOKSTRUCT>(lParam);
-            LeftClick?.Invoke(new Point(hookStruct.pt.x, hookStruct.pt.y));
+            var point = new Point(hookStruct.pt.x, hookStruct.pt.y);
+            var message = (int)wParam;
+
+            if (message == WM_LBUTTONDOWN)
+            {
+                LeftClick?.Invoke(point);
+            }
+            else if (message == WM_MBUTTONDOWN)
+            {
+                MiddleClick?.Invoke(point);
+            }
+            else if (message == WM_RBUTTONDOWN)
+            {
+                RightClick?.Invoke(point);
+            }
+            else if (message == WM_MOUSEWHEEL)
+            {
+                var delta = (short)((hookStruct.mouseData >> 16) & 0xffff);
+                Scroll?.Invoke(point, delta);
+            }
         }
 
         return CallNextHookEx(_hookId, nCode, wParam, lParam);
