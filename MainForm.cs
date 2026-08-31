@@ -18,7 +18,14 @@ public partial class MainForm : Form
     private readonly KeyboardHook _keyboardHook = new();
     private readonly List<MacroEvent> _recordedEvents = new();
     private readonly Stopwatch _stopwatch = new();
+    private readonly Dictionary<Keys, long> _keyDownElapsed = new();
     private long _lastEventElapsedMs;
+    private long? _leftDownElapsed;
+    private Point _leftDownLocation;
+    private long? _middleDownElapsed;
+    private Point _middleDownLocation;
+    private long? _rightDownElapsed;
+    private Point _rightDownLocation;
     private bool _isRecording;
     private bool _isPlaying;
     private bool _isPaused;
@@ -29,11 +36,15 @@ public partial class MainForm : Form
     public MainForm()
     {
         InitializeComponent();
-        _mouseHook.LeftClick += OnLeftClick;
-        _mouseHook.MiddleClick += OnMiddleClick;
-        _mouseHook.RightClick += OnRightClick;
+        _mouseHook.LeftDown += OnLeftDown;
+        _mouseHook.LeftUp += OnLeftUp;
+        _mouseHook.MiddleDown += OnMiddleDown;
+        _mouseHook.MiddleUp += OnMiddleUp;
+        _mouseHook.RightDown += OnRightDown;
+        _mouseHook.RightUp += OnRightUp;
         _mouseHook.Scroll += OnScroll;
         _keyboardHook.KeyDown += OnKeyDown;
+        _keyboardHook.KeyUp += OnKeyUp;
         Deactivate += (sender, e) => TopMost = true;
     }
 
@@ -223,6 +234,10 @@ public partial class MainForm : Form
         _isRecording = true;
         _recordedEvents.Clear();
         _lastEventElapsedMs = 0;
+        _leftDownElapsed = null;
+        _middleDownElapsed = null;
+        _rightDownElapsed = null;
+        _keyDownElapsed.Clear();
         _stopwatch.Restart();
         _recordButton.Text = "■ Stop";
         UpdateRecordingStatus();
@@ -237,6 +252,10 @@ public partial class MainForm : Form
         _mouseHook.Stop();
         _keyboardHook.Stop();
         _stopwatch.Stop();
+        _leftDownElapsed = null;
+        _middleDownElapsed = null;
+        _rightDownElapsed = null;
+        _keyDownElapsed.Clear();
         _statusLabel.Text = $"Status: Idle ({_recordedEvents.Count} events)";
     }
 
@@ -310,19 +329,29 @@ public partial class MainForm : Form
                 switch (macroEvent.Type)
                 {
                     case MacroEventType.MouseClick:
-                        MacroPlayer.MoveAndClick(macroEvent.X, macroEvent.Y);
+                        MacroPlayer.MoveTo(macroEvent.X, macroEvent.Y);
+                        MacroPlayer.LeftDown();
+                        try { await Task.Delay((int)macroEvent.HoldMs, token); }
+                        finally { MacroPlayer.LeftUp(); }
                         break;
                     case MacroEventType.MiddleClick:
-                        MacroPlayer.MoveAndMiddleClick(macroEvent.X, macroEvent.Y);
+                        MacroPlayer.MoveTo(macroEvent.X, macroEvent.Y);
+                        MacroPlayer.MiddleDown();
+                        try { await Task.Delay((int)macroEvent.HoldMs, token); }
+                        finally { MacroPlayer.MiddleUp(); }
                         break;
                     case MacroEventType.RightClick:
-                        MacroPlayer.MoveAndRightClick(macroEvent.X, macroEvent.Y);
+                        MacroPlayer.MoveTo(macroEvent.X, macroEvent.Y);
+                        MacroPlayer.RightDown();
+                        try { await Task.Delay((int)macroEvent.HoldMs, token); }
+                        finally { MacroPlayer.RightUp(); }
                         break;
                     case MacroEventType.Scroll:
-                        MacroPlayer.MoveAndScroll(macroEvent.X, macroEvent.Y, macroEvent.WheelDelta);
+                        MacroPlayer.MoveTo(macroEvent.X, macroEvent.Y);
+                        MacroPlayer.Scroll(macroEvent.WheelDelta);
                         break;
                     default:
-                        MacroPlayer.SendKey(macroEvent.Key);
+                        await HoldKeyAsync(macroEvent.Key, macroEvent.HoldMs, token);
                         break;
                 }
             }
@@ -339,42 +368,125 @@ public partial class MainForm : Form
         }
     }
 
-    private void OnLeftClick(Point location)
+    private async Task HoldKeyAsync(Keys key, long holdMs, CancellationToken token)
     {
-        RecordEvent(MacroEvent.Click(location.X, location.Y, ElapsedSinceLastEvent()));
+        MacroPlayer.KeyDown(key);
+        try
+        {
+            if (holdMs <= 0)
+                return;
+
+            var repeatDelay = MacroPlayer.GetKeyRepeatDelayMs();
+            var repeatInterval = MacroPlayer.GetKeyRepeatIntervalMs();
+
+            if (holdMs <= repeatDelay)
+            {
+                await Task.Delay((int)holdMs, token);
+                return;
+            }
+
+            await Task.Delay(repeatDelay, token);
+            var elapsed = repeatDelay;
+
+            while (elapsed < holdMs)
+            {
+                MacroPlayer.KeyDown(key);
+                var step = Math.Min(repeatInterval, (int)holdMs - elapsed);
+                await Task.Delay(step, token);
+                elapsed += step;
+            }
+        }
+        finally
+        {
+            MacroPlayer.KeyUp(key);
+        }
     }
 
-    private void OnMiddleClick(Point location)
+    private void OnLeftDown(Point location)
     {
-        RecordEvent(MacroEvent.MiddleClick(location.X, location.Y, ElapsedSinceLastEvent()));
+        _leftDownElapsed = _stopwatch.ElapsedMilliseconds;
+        _leftDownLocation = location;
     }
 
-    private void OnRightClick(Point location)
+    private void OnLeftUp(Point location)
     {
-        RecordEvent(MacroEvent.RightClick(location.X, location.Y, ElapsedSinceLastEvent()));
+        if (_leftDownElapsed is not long downElapsed)
+            return;
+
+        var upElapsed = _stopwatch.ElapsedMilliseconds;
+        var delayMs = downElapsed - _lastEventElapsedMs;
+        var holdMs = upElapsed - downElapsed;
+        RecordEvent(MacroEvent.Click(_leftDownLocation.X, _leftDownLocation.Y, delayMs, holdMs), upElapsed);
+        _leftDownElapsed = null;
+    }
+
+    private void OnMiddleDown(Point location)
+    {
+        _middleDownElapsed = _stopwatch.ElapsedMilliseconds;
+        _middleDownLocation = location;
+    }
+
+    private void OnMiddleUp(Point location)
+    {
+        if (_middleDownElapsed is not long downElapsed)
+            return;
+
+        var upElapsed = _stopwatch.ElapsedMilliseconds;
+        var delayMs = downElapsed - _lastEventElapsedMs;
+        var holdMs = upElapsed - downElapsed;
+        RecordEvent(MacroEvent.MiddleClick(_middleDownLocation.X, _middleDownLocation.Y, delayMs, holdMs), upElapsed);
+        _middleDownElapsed = null;
+    }
+
+    private void OnRightDown(Point location)
+    {
+        _rightDownElapsed = _stopwatch.ElapsedMilliseconds;
+        _rightDownLocation = location;
+    }
+
+    private void OnRightUp(Point location)
+    {
+        if (_rightDownElapsed is not long downElapsed)
+            return;
+
+        var upElapsed = _stopwatch.ElapsedMilliseconds;
+        var delayMs = downElapsed - _lastEventElapsedMs;
+        var holdMs = upElapsed - downElapsed;
+        RecordEvent(MacroEvent.RightClick(_rightDownLocation.X, _rightDownLocation.Y, delayMs, holdMs), upElapsed);
+        _rightDownElapsed = null;
     }
 
     private void OnScroll(Point location, int wheelDelta)
     {
-        RecordEvent(MacroEvent.Scroll(location.X, location.Y, wheelDelta, ElapsedSinceLastEvent()));
+        var elapsed = _stopwatch.ElapsedMilliseconds;
+        var delayMs = elapsed - _lastEventElapsedMs;
+        RecordEvent(MacroEvent.Scroll(location.X, location.Y, wheelDelta, delayMs), elapsed);
     }
 
     private void OnKeyDown(Keys key)
     {
-        RecordEvent(MacroEvent.KeyPress(key, ElapsedSinceLastEvent()));
+        if (_keyDownElapsed.ContainsKey(key))
+            return;
+
+        _keyDownElapsed[key] = _stopwatch.ElapsedMilliseconds;
     }
 
-    private long ElapsedSinceLastEvent()
+    private void OnKeyUp(Keys key)
     {
-        var elapsed = _stopwatch.ElapsedMilliseconds;
-        var delay = elapsed - _lastEventElapsedMs;
-        _lastEventElapsedMs = elapsed;
-        return delay;
+        if (!_keyDownElapsed.TryGetValue(key, out var downElapsed))
+            return;
+
+        _keyDownElapsed.Remove(key);
+        var upElapsed = _stopwatch.ElapsedMilliseconds;
+        var delayMs = downElapsed - _lastEventElapsedMs;
+        var holdMs = upElapsed - downElapsed;
+        RecordEvent(MacroEvent.KeyPress(key, delayMs, holdMs), upElapsed);
     }
 
-    private void RecordEvent(MacroEvent macroEvent)
+    private void RecordEvent(MacroEvent macroEvent, long completionElapsedMs)
     {
         _recordedEvents.Add(macroEvent);
+        _lastEventElapsedMs = completionElapsedMs;
         UpdateRecordingStatus();
     }
 
