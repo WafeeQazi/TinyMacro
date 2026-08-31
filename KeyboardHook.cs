@@ -5,10 +5,13 @@ namespace TinyMacro;
 public class KeyboardHook
 {
     public event Action<Keys>? KeyDown;
+    public event Action<Keys>? KeyUp;
 
     private const int WH_KEYBOARD_LL = 13;
     private const int WM_KEYDOWN = 0x0100;
+    private const int WM_KEYUP = 0x0101;
     private const int WM_SYSKEYDOWN = 0x0104;
+    private const int WM_SYSKEYUP = 0x0105;
 
     private readonly LowLevelKeyboardProc _proc;
     private IntPtr _hookId = IntPtr.Zero;
@@ -39,10 +42,20 @@ public class KeyboardHook
 
     private IntPtr HookCallback(int nCode, IntPtr wParam, IntPtr lParam)
     {
-        if (nCode >= 0 && ((int)wParam == WM_KEYDOWN || (int)wParam == WM_SYSKEYDOWN))
+        if (nCode >= 0)
         {
             var hookStruct = Marshal.PtrToStructure<KBDLLHOOKSTRUCT>(lParam);
-            KeyDown?.Invoke((Keys)hookStruct.vkCode);
+            var key = (Keys)hookStruct.vkCode;
+            var message = (int)wParam;
+
+            if (message == WM_KEYDOWN || message == WM_SYSKEYDOWN)
+            {
+                KeyDown?.Invoke(key);
+            }
+            else if (message == WM_KEYUP || message == WM_SYSKEYUP)
+            {
+                KeyUp?.Invoke(key);
+            }
         }
 
         return CallNextHookEx(_hookId, nCode, wParam, lParam);
