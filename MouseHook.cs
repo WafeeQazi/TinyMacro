@@ -4,15 +4,21 @@ namespace TinyMacro;
 
 public class MouseHook
 {
-    public event Action<Point>? LeftClick;
-    public event Action<Point>? MiddleClick;
-    public event Action<Point>? RightClick;
+    public event Action<Point>? LeftDown;
+    public event Action<Point>? LeftUp;
+    public event Action<Point>? MiddleDown;
+    public event Action<Point>? MiddleUp;
+    public event Action<Point>? RightDown;
+    public event Action<Point>? RightUp;
     public event Action<Point, int>? Scroll;
 
     private const int WH_MOUSE_LL = 14;
     private const int WM_LBUTTONDOWN = 0x0201;
+    private const int WM_LBUTTONUP = 0x0202;
     private const int WM_RBUTTONDOWN = 0x0204;
+    private const int WM_RBUTTONUP = 0x0205;
     private const int WM_MBUTTONDOWN = 0x0207;
+    private const int WM_MBUTTONUP = 0x0208;
     private const int WM_MOUSEWHEEL = 0x020A;
 
     private readonly LowLevelMouseProc _proc;
@@ -50,22 +56,30 @@ public class MouseHook
             var point = new Point(hookStruct.pt.x, hookStruct.pt.y);
             var message = (int)wParam;
 
-            if (message == WM_LBUTTONDOWN)
+            switch (message)
             {
-                LeftClick?.Invoke(point);
-            }
-            else if (message == WM_MBUTTONDOWN)
-            {
-                MiddleClick?.Invoke(point);
-            }
-            else if (message == WM_RBUTTONDOWN)
-            {
-                RightClick?.Invoke(point);
-            }
-            else if (message == WM_MOUSEWHEEL)
-            {
-                var delta = (short)((hookStruct.mouseData >> 16) & 0xffff);
-                Scroll?.Invoke(point, delta);
+                case WM_LBUTTONDOWN:
+                    LeftDown?.Invoke(point);
+                    break;
+                case WM_LBUTTONUP:
+                    LeftUp?.Invoke(point);
+                    break;
+                case WM_MBUTTONDOWN:
+                    MiddleDown?.Invoke(point);
+                    break;
+                case WM_MBUTTONUP:
+                    MiddleUp?.Invoke(point);
+                    break;
+                case WM_RBUTTONDOWN:
+                    RightDown?.Invoke(point);
+                    break;
+                case WM_RBUTTONUP:
+                    RightUp?.Invoke(point);
+                    break;
+                case WM_MOUSEWHEEL:
+                    var delta = (short)((hookStruct.mouseData >> 16) & 0xffff);
+                    Scroll?.Invoke(point, delta);
+                    break;
             }
         }
 
