@@ -14,46 +14,57 @@ public static class MacroPlayer
     private const uint MOUSEEVENTF_MIDDLEUP = 0x0040;
     private const uint MOUSEEVENTF_WHEEL = 0x0800;
     private const uint KEYEVENTF_KEYUP = 0x0002;
+    private const uint SPI_GETKEYBOARDSPEED = 0x000A;
+    private const uint SPI_GETKEYBOARDDELAY = 0x0016;
 
-    public static void MoveAndClick(int x, int y)
+    public static void MoveTo(int x, int y)
     {
         SetCursorPos(x, y);
-        SendMouseButton(MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP);
     }
 
-    public static void MoveAndMiddleClick(int x, int y)
-    {
-        SetCursorPos(x, y);
-        SendMouseButton(MOUSEEVENTF_MIDDLEDOWN, MOUSEEVENTF_MIDDLEUP);
-    }
+    public static void LeftDown() => SendMouseFlag(MOUSEEVENTF_LEFTDOWN);
+    public static void LeftUp() => SendMouseFlag(MOUSEEVENTF_LEFTUP);
+    public static void MiddleDown() => SendMouseFlag(MOUSEEVENTF_MIDDLEDOWN);
+    public static void MiddleUp() => SendMouseFlag(MOUSEEVENTF_MIDDLEUP);
+    public static void RightDown() => SendMouseFlag(MOUSEEVENTF_RIGHTDOWN);
+    public static void RightUp() => SendMouseFlag(MOUSEEVENTF_RIGHTUP);
 
-    public static void MoveAndRightClick(int x, int y)
+    public static void Scroll(int wheelDelta)
     {
-        SetCursorPos(x, y);
-        SendMouseButton(MOUSEEVENTF_RIGHTDOWN, MOUSEEVENTF_RIGHTUP);
-    }
-
-    public static void MoveAndScroll(int x, int y, int wheelDelta)
-    {
-        SetCursorPos(x, y);
         var inputs = new INPUT[1];
         inputs[0] = CreateMouseInput(MOUSEEVENTF_WHEEL, (uint)wheelDelta);
         SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<INPUT>());
     }
 
-    public static void SendKey(Keys key)
+    public static void KeyDown(Keys key) => SendKeyboardFlag(key, false);
+    public static void KeyUp(Keys key) => SendKeyboardFlag(key, true);
+
+    public static int GetKeyRepeatDelayMs()
     {
-        var inputs = new INPUT[2];
-        inputs[0] = CreateKeyboardInput((ushort)key, false);
-        inputs[1] = CreateKeyboardInput((ushort)key, true);
+        uint delaySetting = 0;
+        SystemParametersInfo(SPI_GETKEYBOARDDELAY, 0, ref delaySetting, 0);
+        return (int)((delaySetting + 1) * 250);
+    }
+
+    public static int GetKeyRepeatIntervalMs()
+    {
+        uint speedSetting = 0;
+        SystemParametersInfo(SPI_GETKEYBOARDSPEED, 0, ref speedSetting, 0);
+        var charsPerSecond = 2.5 + speedSetting * (30.0 - 2.5) / 31.0;
+        return Math.Max((int)(1000 / charsPerSecond), 1);
+    }
+
+    private static void SendMouseFlag(uint flag)
+    {
+        var inputs = new INPUT[1];
+        inputs[0] = CreateMouseInput(flag, 0);
         SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<INPUT>());
     }
 
-    private static void SendMouseButton(uint downFlag, uint upFlag)
+    private static void SendKeyboardFlag(Keys key, bool keyUp)
     {
-        var inputs = new INPUT[2];
-        inputs[0] = CreateMouseInput(downFlag, 0);
-        inputs[1] = CreateMouseInput(upFlag, 0);
+        var inputs = new INPUT[1];
+        inputs[0] = CreateKeyboardInput((ushort)key, keyUp);
         SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<INPUT>());
     }
 
@@ -128,4 +139,7 @@ public static class MacroPlayer
 
     [DllImport("user32.dll", SetLastError = true)]
     private static extern uint SendInput(uint nInputs, INPUT[] pInputs, int cbSize);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern bool SystemParametersInfo(uint uiAction, uint uiParam, ref uint pvParam, uint fWinIni);
 }
