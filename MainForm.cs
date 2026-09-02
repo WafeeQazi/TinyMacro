@@ -4,6 +4,9 @@ namespace TinyMacro;
 
 public partial class MainForm : Form
 {
+    private const int MinMoveIntervalMs = 40;
+    private const int MinMoveDistancePx = 4;
+
     private MenuStrip _menuStrip = null!;
     private Button _recordButton = null!;
     private Button _playButton = null!;
@@ -26,6 +29,8 @@ public partial class MainForm : Form
     private Point _middleDownLocation;
     private long? _rightDownElapsed;
     private Point _rightDownLocation;
+    private Point? _lastMovePosition;
+    private long _lastMoveRecordedElapsed;
     private bool _isRecording;
     private bool _isPlaying;
     private bool _isPaused;
@@ -43,6 +48,7 @@ public partial class MainForm : Form
         _mouseHook.RightDown += OnRightDown;
         _mouseHook.RightUp += OnRightUp;
         _mouseHook.Scroll += OnScroll;
+        _mouseHook.Move += OnMouseMove;
         _keyboardHook.KeyDown += OnKeyDown;
         _keyboardHook.KeyUp += OnKeyUp;
         Deactivate += (sender, e) => TopMost = true;
@@ -238,6 +244,8 @@ public partial class MainForm : Form
         _middleDownElapsed = null;
         _rightDownElapsed = null;
         _keyDownElapsed.Clear();
+        _lastMovePosition = null;
+        _lastMoveRecordedElapsed = 0;
         _stopwatch.Restart();
         _recordButton.Text = "■ Stop";
         UpdateRecordingStatus();
@@ -350,6 +358,9 @@ public partial class MainForm : Form
                         MacroPlayer.MoveTo(macroEvent.X, macroEvent.Y);
                         MacroPlayer.Scroll(macroEvent.WheelDelta);
                         break;
+                    case MacroEventType.MouseMove:
+                        MacroPlayer.MoveTo(macroEvent.X, macroEvent.Y);
+                        break;
                     default:
                         await HoldKeyAsync(macroEvent.Key, macroEvent.HoldMs, token);
                         break;
@@ -461,6 +472,29 @@ public partial class MainForm : Form
         var elapsed = _stopwatch.ElapsedMilliseconds;
         var delayMs = elapsed - _lastEventElapsedMs;
         RecordEvent(MacroEvent.Scroll(location.X, location.Y, wheelDelta, delayMs), elapsed);
+    }
+
+    private void OnMouseMove(Point location)
+    {
+        if (_leftDownElapsed.HasValue || _middleDownElapsed.HasValue || _rightDownElapsed.HasValue)
+            return;
+
+        var elapsed = _stopwatch.ElapsedMilliseconds;
+
+        if (_lastMovePosition is Point lastPosition)
+        {
+            var dx = location.X - lastPosition.X;
+            var dy = location.Y - lastPosition.Y;
+            var distanceSq = (dx * dx) + (dy * dy);
+
+            if (elapsed - _lastMoveRecordedElapsed < MinMoveIntervalMs && distanceSq < MinMoveDistancePx * MinMoveDistancePx)
+                return;
+        }
+
+        _lastMovePosition = location;
+        _lastMoveRecordedElapsed = elapsed;
+        var delayMs = elapsed - _lastEventElapsedMs;
+        RecordEvent(MacroEvent.Move(location.X, location.Y, delayMs), elapsed);
     }
 
     private void OnKeyDown(Keys key)
