@@ -11,6 +11,7 @@ public class MouseHook
     public event Action<Point>? RightDown;
     public event Action<Point>? RightUp;
     public event Action<Point, int>? Scroll;
+    public event Action<Point>? Move;
 
     private const int WH_MOUSE_LL = 14;
     private const int WM_LBUTTONDOWN = 0x0201;
@@ -20,6 +21,7 @@ public class MouseHook
     private const int WM_MBUTTONDOWN = 0x0207;
     private const int WM_MBUTTONUP = 0x0208;
     private const int WM_MOUSEWHEEL = 0x020A;
+    private const int WM_MOUSEMOVE = 0x0200;
 
     private readonly LowLevelMouseProc _proc;
     private IntPtr _hookId = IntPtr.Zero;
@@ -79,6 +81,9 @@ public class MouseHook
                 case WM_MOUSEWHEEL:
                     var delta = (short)((hookStruct.mouseData >> 16) & 0xffff);
                     Scroll?.Invoke(point, delta);
+                    break;
+                case WM_MOUSEMOVE:
+                    Move?.Invoke(point);
                     break;
             }
         }
