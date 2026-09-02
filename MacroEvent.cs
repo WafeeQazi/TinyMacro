@@ -6,6 +6,7 @@ public enum MacroEventType
     MiddleClick,
     RightClick,
     Scroll,
+    MouseMove,
     KeyPress
 }
 
@@ -39,6 +40,11 @@ public class MacroEvent
         return new MacroEvent { Type = MacroEventType.Scroll, X = x, Y = y, WheelDelta = wheelDelta, DelayMs = delayMs };
     }
 
+    public static MacroEvent Move(int x, int y, long delayMs)
+    {
+        return new MacroEvent { Type = MacroEventType.MouseMove, X = x, Y = y, DelayMs = delayMs };
+    }
+
     public static MacroEvent KeyPress(Keys key, long delayMs, long holdMs)
     {
         return new MacroEvent { Type = MacroEventType.KeyPress, Key = key, DelayMs = delayMs, HoldMs = holdMs };
@@ -52,6 +58,7 @@ public class MacroEvent
             MacroEventType.MiddleClick => $"Middle click at ({X},{Y}) after {DelayMs}ms, held {HoldMs}ms",
             MacroEventType.RightClick => $"Right click at ({X},{Y}) after {DelayMs}ms, held {HoldMs}ms",
             MacroEventType.Scroll => $"Scroll {WheelDelta} at ({X},{Y}) after {DelayMs}ms",
+            MacroEventType.MouseMove => $"Move to ({X},{Y}) after {DelayMs}ms",
             _ => $"Key {Key} after {DelayMs}ms, held {HoldMs}ms"
         };
     }
