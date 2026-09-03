@@ -14,6 +14,8 @@ public partial class MainForm : Form
     private Panel _repeatPanel = null!;
     private NumericUpDown _repeatCountInput = null!;
     private CheckBox _repeatForeverCheckbox = null!;
+    private Panel _speedPanel = null!;
+    private NumericUpDown _speedInput = null!;
     private Label _statusLabel = null!;
     private Label _macroNameLabel = null!;
 
@@ -23,17 +25,14 @@ public partial class MainForm : Form
     private readonly Stopwatch _stopwatch = new();
     private readonly Dictionary<Keys, long> _keyDownElapsed = new();
     private long _lastEventElapsedMs;
-    private long? _leftDownElapsed;
-    private Point _leftDownLocation;
-    private long? _middleDownElapsed;
-    private Point _middleDownLocation;
-    private long? _rightDownElapsed;
-    private Point _rightDownLocation;
     private Point? _lastMovePosition;
     private long _lastMoveRecordedElapsed;
     private bool _isRecording;
     private bool _isPlaying;
     private bool _isPaused;
+    private bool _leftButtonPhysicallyDown;
+    private bool _middleButtonPhysicallyDown;
+    private bool _rightButtonPhysicallyDown;
     private CancellationTokenSource? _playbackCts;
     private string _macroName = "Untitled";
     private string? _currentFilePath;
@@ -57,7 +56,7 @@ public partial class MainForm : Form
     private void InitializeComponent()
     {
         Text = "TinyMacro";
-        ClientSize = new Size(240, 280);
+        ClientSize = new Size(240, 320);
         FormBorderStyle = FormBorderStyle.FixedSingle;
         MaximizeBox = false;
         StartPosition = FormStartPosition.CenterScreen;
@@ -122,6 +121,41 @@ public partial class MainForm : Form
         _repeatPanel.Controls.Add(_repeatCountInput);
         _repeatPanel.Controls.Add(_repeatForeverCheckbox);
 
+        _speedPanel = new Panel
+        {
+            Dock = DockStyle.Top,
+            Height = 36
+        };
+
+        var speedLabel = new Label
+        {
+            Text = "Speed:",
+            Location = new Point(8, 10),
+            AutoSize = true
+        };
+
+        _speedInput = new NumericUpDown
+        {
+            Location = new Point(70, 7),
+            Width = 55,
+            Minimum = 0.1m,
+            Maximum = 5.0m,
+            Increment = 0.1m,
+            DecimalPlaces = 1,
+            Value = 1.0m
+        };
+
+        var speedSuffixLabel = new Label
+        {
+            Text = "x",
+            Location = new Point(130, 10),
+            AutoSize = true
+        };
+
+        _speedPanel.Controls.Add(speedLabel);
+        _speedPanel.Controls.Add(_speedInput);
+        _speedPanel.Controls.Add(speedSuffixLabel);
+
         _stopPlaybackButton = new Button
         {
             Text = "■ Stop Playback",
@@ -150,6 +184,7 @@ public partial class MainForm : Form
         MainMenuStrip = _menuStrip;
 
         Controls.Add(_stopPlaybackButton);
+        Controls.Add(_speedPanel);
         Controls.Add(_repeatPanel);
         Controls.Add(_playButton);
         Controls.Add(_recordButton);
@@ -240,12 +275,9 @@ public partial class MainForm : Form
         _isRecording = true;
         _recordedEvents.Clear();
         _lastEventElapsedMs = 0;
-        _leftDownElapsed = null;
-        _middleDownElapsed = null;
-        _rightDownElapsed = null;
-        _keyDownElapsed.Clear();
         _lastMovePosition = null;
         _lastMoveRecordedElapsed = 0;
+        _keyDownElapsed.Clear();
         _stopwatch.Restart();
         _recordButton.Text = "■ Stop";
         UpdateRecordingStatus();
@@ -260,9 +292,6 @@ public partial class MainForm : Form
         _mouseHook.Stop();
         _keyboardHook.Stop();
         _stopwatch.Stop();
-        _leftDownElapsed = null;
-        _middleDownElapsed = null;
-        _rightDownElapsed = null;
         _keyDownElapsed.Clear();
         _statusLabel.Text = $"Status: Idle ({_recordedEvents.Count} events)";
     }
@@ -290,13 +319,18 @@ public partial class MainForm : Form
 
         _isPlaying = true;
         _isPaused = false;
+        _leftButtonPhysicallyDown = false;
+        _middleButtonPhysicallyDown = false;
+        _rightButtonPhysicallyDown = false;
         _playButton.Text = "⏸ Pause";
         _stopPlaybackButton.Enabled = true;
         _recordButton.Enabled = false;
         _repeatCountInput.Enabled = false;
         _repeatForeverCheckbox.Enabled = false;
+        _speedInput.Enabled = false;
         _statusLabel.Text = "Status: Playing...";
         _playbackCts = new CancellationTokenSource();
+        MacroPlayer.BeginHighResolutionTiming();
 
         try
         {
@@ -309,6 +343,26 @@ public partial class MainForm : Form
         }
         finally
         {
+            MacroPlayer.EndHighResolutionTiming();
+
+            if (_leftButtonPhysicallyDown)
+            {
+                MacroPlayer.LeftUp();
+                _leftButtonPhysicallyDown = false;
+            }
+
+            if (_middleButtonPhysicallyDown)
+            {
+                MacroPlayer.MiddleUp();
+                _middleButtonPhysicallyDown = false;
+            }
+
+            if (_rightButtonPhysicallyDown)
+            {
+                MacroPlayer.RightUp();
+                _rightButtonPhysicallyDown = false;
+            }
+
             _isPlaying = false;
             _isPaused = false;
             _playButton.Text = "▶ Play";
@@ -316,6 +370,7 @@ public partial class MainForm : Form
             _recordButton.Enabled = true;
             _repeatCountInput.Enabled = !_repeatForeverCheckbox.Checked;
             _repeatForeverCheckbox.Enabled = true;
+            _speedInput.Enabled = true;
         }
     }
 
@@ -323,6 +378,7 @@ public partial class MainForm : Form
     {
         var repeatForever = _repeatForeverCheckbox.Checked;
         var repeatCount = (int)_repeatCountInput.Value;
+        var speed = (double)_speedInput.Value;
         var iteration = 0;
 
         while (repeatForever || iteration < repeatCount)
@@ -330,29 +386,41 @@ public partial class MainForm : Form
             foreach (var macroEvent in _recordedEvents)
             {
                 await WaitWhilePausedAsync(token);
-                await Task.Delay((int)macroEvent.DelayMs, token);
+                await Task.Delay(ScaledMs(macroEvent.DelayMs, speed), token);
                 token.ThrowIfCancellationRequested();
                 await WaitWhilePausedAsync(token);
 
                 switch (macroEvent.Type)
                 {
-                    case MacroEventType.MouseClick:
+                    case MacroEventType.LeftDown:
                         MacroPlayer.MoveTo(macroEvent.X, macroEvent.Y);
                         MacroPlayer.LeftDown();
-                        try { await Task.Delay((int)macroEvent.HoldMs, token); }
-                        finally { MacroPlayer.LeftUp(); }
+                        _leftButtonPhysicallyDown = true;
                         break;
-                    case MacroEventType.MiddleClick:
+                    case MacroEventType.LeftUp:
+                        MacroPlayer.MoveTo(macroEvent.X, macroEvent.Y);
+                        MacroPlayer.LeftUp();
+                        _leftButtonPhysicallyDown = false;
+                        break;
+                    case MacroEventType.MiddleDown:
                         MacroPlayer.MoveTo(macroEvent.X, macroEvent.Y);
                         MacroPlayer.MiddleDown();
-                        try { await Task.Delay((int)macroEvent.HoldMs, token); }
-                        finally { MacroPlayer.MiddleUp(); }
+                        _middleButtonPhysicallyDown = true;
                         break;
-                    case MacroEventType.RightClick:
+                    case MacroEventType.MiddleUp:
+                        MacroPlayer.MoveTo(macroEvent.X, macroEvent.Y);
+                        MacroPlayer.MiddleUp();
+                        _middleButtonPhysicallyDown = false;
+                        break;
+                    case MacroEventType.RightDown:
                         MacroPlayer.MoveTo(macroEvent.X, macroEvent.Y);
                         MacroPlayer.RightDown();
-                        try { await Task.Delay((int)macroEvent.HoldMs, token); }
-                        finally { MacroPlayer.RightUp(); }
+                        _rightButtonPhysicallyDown = true;
+                        break;
+                    case MacroEventType.RightUp:
+                        MacroPlayer.MoveTo(macroEvent.X, macroEvent.Y);
+                        MacroPlayer.RightUp();
+                        _rightButtonPhysicallyDown = false;
                         break;
                     case MacroEventType.Scroll:
                         MacroPlayer.MoveTo(macroEvent.X, macroEvent.Y);
@@ -362,13 +430,21 @@ public partial class MainForm : Form
                         MacroPlayer.MoveTo(macroEvent.X, macroEvent.Y);
                         break;
                     default:
-                        await HoldKeyAsync(macroEvent.Key, macroEvent.HoldMs, token);
+                        await HoldKeyAsync(macroEvent.Key, ScaledMs(macroEvent.HoldMs, speed), token);
                         break;
                 }
             }
 
             iteration++;
         }
+    }
+
+    private static int ScaledMs(long ms, double speed)
+    {
+        if (speed <= 0)
+            speed = 1.0;
+
+        return (int)Math.Max(0, ms / speed);
     }
 
     private async Task WaitWhilePausedAsync(CancellationToken token)
@@ -415,56 +491,44 @@ public partial class MainForm : Form
 
     private void OnLeftDown(Point location)
     {
-        _leftDownElapsed = _stopwatch.ElapsedMilliseconds;
-        _leftDownLocation = location;
+        var elapsed = _stopwatch.ElapsedMilliseconds;
+        var delayMs = elapsed - _lastEventElapsedMs;
+        RecordEvent(MacroEvent.LeftDown(location.X, location.Y, delayMs), elapsed);
     }
 
     private void OnLeftUp(Point location)
     {
-        if (_leftDownElapsed is not long downElapsed)
-            return;
-
-        var upElapsed = _stopwatch.ElapsedMilliseconds;
-        var delayMs = downElapsed - _lastEventElapsedMs;
-        var holdMs = upElapsed - downElapsed;
-        RecordEvent(MacroEvent.Click(_leftDownLocation.X, _leftDownLocation.Y, delayMs, holdMs), upElapsed);
-        _leftDownElapsed = null;
+        var elapsed = _stopwatch.ElapsedMilliseconds;
+        var delayMs = elapsed - _lastEventElapsedMs;
+        RecordEvent(MacroEvent.LeftUp(location.X, location.Y, delayMs), elapsed);
     }
 
     private void OnMiddleDown(Point location)
     {
-        _middleDownElapsed = _stopwatch.ElapsedMilliseconds;
-        _middleDownLocation = location;
+        var elapsed = _stopwatch.ElapsedMilliseconds;
+        var delayMs = elapsed - _lastEventElapsedMs;
+        RecordEvent(MacroEvent.MiddleDown(location.X, location.Y, delayMs), elapsed);
     }
 
     private void OnMiddleUp(Point location)
     {
-        if (_middleDownElapsed is not long downElapsed)
-            return;
-
-        var upElapsed = _stopwatch.ElapsedMilliseconds;
-        var delayMs = downElapsed - _lastEventElapsedMs;
-        var holdMs = upElapsed - downElapsed;
-        RecordEvent(MacroEvent.MiddleClick(_middleDownLocation.X, _middleDownLocation.Y, delayMs, holdMs), upElapsed);
-        _middleDownElapsed = null;
+        var elapsed = _stopwatch.ElapsedMilliseconds;
+        var delayMs = elapsed - _lastEventElapsedMs;
+        RecordEvent(MacroEvent.MiddleUp(location.X, location.Y, delayMs), elapsed);
     }
 
     private void OnRightDown(Point location)
     {
-        _rightDownElapsed = _stopwatch.ElapsedMilliseconds;
-        _rightDownLocation = location;
+        var elapsed = _stopwatch.ElapsedMilliseconds;
+        var delayMs = elapsed - _lastEventElapsedMs;
+        RecordEvent(MacroEvent.RightDown(location.X, location.Y, delayMs), elapsed);
     }
 
     private void OnRightUp(Point location)
     {
-        if (_rightDownElapsed is not long downElapsed)
-            return;
-
-        var upElapsed = _stopwatch.ElapsedMilliseconds;
-        var delayMs = downElapsed - _lastEventElapsedMs;
-        var holdMs = upElapsed - downElapsed;
-        RecordEvent(MacroEvent.RightClick(_rightDownLocation.X, _rightDownLocation.Y, delayMs, holdMs), upElapsed);
-        _rightDownElapsed = null;
+        var elapsed = _stopwatch.ElapsedMilliseconds;
+        var delayMs = elapsed - _lastEventElapsedMs;
+        RecordEvent(MacroEvent.RightUp(location.X, location.Y, delayMs), elapsed);
     }
 
     private void OnScroll(Point location, int wheelDelta)
@@ -476,9 +540,6 @@ public partial class MainForm : Form
 
     private void OnMouseMove(Point location)
     {
-        if (_leftDownElapsed.HasValue || _middleDownElapsed.HasValue || _rightDownElapsed.HasValue)
-            return;
-
         var elapsed = _stopwatch.ElapsedMilliseconds;
 
         if (_lastMovePosition is Point lastPosition)
