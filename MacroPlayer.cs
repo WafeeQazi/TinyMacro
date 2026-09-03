@@ -134,6 +134,9 @@ public static class MacroPlayer
         public IntPtr dwExtraInfo;
     }
 
+    public static void BeginHighResolutionTiming() => TimeBeginPeriod(1);
+    public static void EndHighResolutionTiming() => TimeEndPeriod(1);
+
     [DllImport("user32.dll", SetLastError = true)]
     private static extern bool SetCursorPos(int x, int y);
 
@@ -142,4 +145,10 @@ public static class MacroPlayer
 
     [DllImport("user32.dll", SetLastError = true)]
     private static extern bool SystemParametersInfo(uint uiAction, uint uiParam, ref uint pvParam, uint fWinIni);
+
+    [DllImport("winmm.dll", EntryPoint = "timeBeginPeriod", SetLastError = true)]
+    private static extern uint TimeBeginPeriod(uint uMilliseconds);
+
+    [DllImport("winmm.dll", EntryPoint = "timeEndPeriod", SetLastError = true)]
+    private static extern uint TimeEndPeriod(uint uMilliseconds);
 }
