@@ -2,9 +2,12 @@ namespace TinyMacro;
 
 public enum MacroEventType
 {
-    MouseClick,
-    MiddleClick,
-    RightClick,
+    LeftDown,
+    LeftUp,
+    MiddleDown,
+    MiddleUp,
+    RightDown,
+    RightUp,
     Scroll,
     MouseMove,
     KeyPress
@@ -20,43 +23,43 @@ public class MacroEvent
     public long DelayMs { get; init; }
     public long HoldMs { get; init; }
 
-    public static MacroEvent Click(int x, int y, long delayMs, long holdMs)
-    {
-        return new MacroEvent { Type = MacroEventType.MouseClick, X = x, Y = y, DelayMs = delayMs, HoldMs = holdMs };
-    }
+    public static MacroEvent LeftDown(int x, int y, long delayMs) =>
+        new() { Type = MacroEventType.LeftDown, X = x, Y = y, DelayMs = delayMs };
 
-    public static MacroEvent MiddleClick(int x, int y, long delayMs, long holdMs)
-    {
-        return new MacroEvent { Type = MacroEventType.MiddleClick, X = x, Y = y, DelayMs = delayMs, HoldMs = holdMs };
-    }
+    public static MacroEvent LeftUp(int x, int y, long delayMs) =>
+        new() { Type = MacroEventType.LeftUp, X = x, Y = y, DelayMs = delayMs };
 
-    public static MacroEvent RightClick(int x, int y, long delayMs, long holdMs)
-    {
-        return new MacroEvent { Type = MacroEventType.RightClick, X = x, Y = y, DelayMs = delayMs, HoldMs = holdMs };
-    }
+    public static MacroEvent MiddleDown(int x, int y, long delayMs) =>
+        new() { Type = MacroEventType.MiddleDown, X = x, Y = y, DelayMs = delayMs };
 
-    public static MacroEvent Scroll(int x, int y, int wheelDelta, long delayMs)
-    {
-        return new MacroEvent { Type = MacroEventType.Scroll, X = x, Y = y, WheelDelta = wheelDelta, DelayMs = delayMs };
-    }
+    public static MacroEvent MiddleUp(int x, int y, long delayMs) =>
+        new() { Type = MacroEventType.MiddleUp, X = x, Y = y, DelayMs = delayMs };
 
-    public static MacroEvent Move(int x, int y, long delayMs)
-    {
-        return new MacroEvent { Type = MacroEventType.MouseMove, X = x, Y = y, DelayMs = delayMs };
-    }
+    public static MacroEvent RightDown(int x, int y, long delayMs) =>
+        new() { Type = MacroEventType.RightDown, X = x, Y = y, DelayMs = delayMs };
 
-    public static MacroEvent KeyPress(Keys key, long delayMs, long holdMs)
-    {
-        return new MacroEvent { Type = MacroEventType.KeyPress, Key = key, DelayMs = delayMs, HoldMs = holdMs };
-    }
+    public static MacroEvent RightUp(int x, int y, long delayMs) =>
+        new() { Type = MacroEventType.RightUp, X = x, Y = y, DelayMs = delayMs };
+
+    public static MacroEvent Scroll(int x, int y, int wheelDelta, long delayMs) =>
+        new() { Type = MacroEventType.Scroll, X = x, Y = y, WheelDelta = wheelDelta, DelayMs = delayMs };
+
+    public static MacroEvent Move(int x, int y, long delayMs) =>
+        new() { Type = MacroEventType.MouseMove, X = x, Y = y, DelayMs = delayMs };
+
+    public static MacroEvent KeyPress(Keys key, long delayMs, long holdMs) =>
+        new() { Type = MacroEventType.KeyPress, Key = key, DelayMs = delayMs, HoldMs = holdMs };
 
     public override string ToString()
     {
         return Type switch
         {
-            MacroEventType.MouseClick => $"Left click at ({X},{Y}) after {DelayMs}ms, held {HoldMs}ms",
-            MacroEventType.MiddleClick => $"Middle click at ({X},{Y}) after {DelayMs}ms, held {HoldMs}ms",
-            MacroEventType.RightClick => $"Right click at ({X},{Y}) after {DelayMs}ms, held {HoldMs}ms",
+            MacroEventType.LeftDown => $"Left down at ({X},{Y}) after {DelayMs}ms",
+            MacroEventType.LeftUp => $"Left up at ({X},{Y}) after {DelayMs}ms",
+            MacroEventType.MiddleDown => $"Middle down at ({X},{Y}) after {DelayMs}ms",
+            MacroEventType.MiddleUp => $"Middle up at ({X},{Y}) after {DelayMs}ms",
+            MacroEventType.RightDown => $"Right down at ({X},{Y}) after {DelayMs}ms",
+            MacroEventType.RightUp => $"Right up at ({X},{Y}) after {DelayMs}ms",
             MacroEventType.Scroll => $"Scroll {WheelDelta} at ({X},{Y}) after {DelayMs}ms",
             MacroEventType.MouseMove => $"Move to ({X},{Y}) after {DelayMs}ms",
             _ => $"Key {Key} after {DelayMs}ms, held {HoldMs}ms"
