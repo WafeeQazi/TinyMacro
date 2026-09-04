@@ -207,7 +207,7 @@ public partial class MainForm : Form
         _macroName = "Untitled";
         _currentFilePath = null;
         _macroNameLabel.Text = $"Macro: {_macroName}";
-        _statusLabel.Text = "Status: Idle";
+        _statusLabel.Text = "Status: Idle (0 events)";
     }
 
     private void OnOpenClicked(object? sender, EventArgs e)
@@ -219,7 +219,21 @@ public partial class MainForm : Form
         if (dialog.ShowDialog() != DialogResult.OK)
             return;
 
-        var data = MacroFile.Load(dialog.FileName);
+        MacroData data;
+        try
+        {
+            data = MacroFile.Load(dialog.FileName);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                $"Couldn't load this macro file. It may be corrupted or in an unsupported format.\n\n{ex.Message}",
+                "TinyMacro",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error);
+            return;
+        }
+
         _recordedEvents.Clear();
         _recordedEvents.AddRange(data.Events);
         _macroName = data.Name;
@@ -253,9 +267,20 @@ public partial class MainForm : Form
 
     private void SaveToFile(string path)
     {
-        var data = new MacroData { Name = _macroName, Events = _recordedEvents };
-        MacroFile.Save(path, data);
-        _statusLabel.Text = $"Status: Saved ({_recordedEvents.Count} events)";
+        try
+        {
+            var data = new MacroData { Name = _macroName, Events = _recordedEvents };
+            MacroFile.Save(path, data);
+            _statusLabel.Text = $"Status: Saved ({_recordedEvents.Count} events)";
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                $"Couldn't save the macro file.\n\n{ex.Message}",
+                "TinyMacro",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error);
+        }
     }
 
     private void OnRecordButtonClicked(object? sender, EventArgs e)
@@ -272,17 +297,32 @@ public partial class MainForm : Form
 
     private void StartRecording()
     {
-        _isRecording = true;
         _recordedEvents.Clear();
         _lastEventElapsedMs = 0;
         _lastMovePosition = null;
         _lastMoveRecordedElapsed = 0;
         _keyDownElapsed.Clear();
         _stopwatch.Restart();
+
+        var mouseHooked = _mouseHook.Start();
+        var keyboardHooked = _keyboardHook.Start();
+
+        if (!mouseHooked || !keyboardHooked)
+        {
+            _mouseHook.Stop();
+            _keyboardHook.Stop();
+            _stopwatch.Stop();
+            MessageBox.Show(
+                "TinyMacro couldn't install the system input hooks needed to record. This can happen if another program is blocking global hooks. Try restarting the app, or running it as administrator.",
+                "TinyMacro",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error);
+            return;
+        }
+
+        _isRecording = true;
         _recordButton.Text = "■ Stop";
         UpdateRecordingStatus();
-        _mouseHook.Start();
-        _keyboardHook.Start();
     }
 
     private void StopRecording()
@@ -344,24 +384,7 @@ public partial class MainForm : Form
         finally
         {
             MacroPlayer.EndHighResolutionTiming();
-
-            if (_leftButtonPhysicallyDown)
-            {
-                MacroPlayer.LeftUp();
-                _leftButtonPhysicallyDown = false;
-            }
-
-            if (_middleButtonPhysicallyDown)
-            {
-                MacroPlayer.MiddleUp();
-                _middleButtonPhysicallyDown = false;
-            }
-
-            if (_rightButtonPhysicallyDown)
-            {
-                MacroPlayer.RightUp();
-                _rightButtonPhysicallyDown = false;
-            }
+            ReleaseAnyHeldButtons();
 
             _isPlaying = false;
             _isPaused = false;
@@ -377,8 +400,8 @@ public partial class MainForm : Form
     private async Task PlaybackAsync(CancellationToken token)
     {
         var repeatForever = _repeatForeverCheckbox.Checked;
-        var repeatCount = (int)_repeatCountInput.Value;
-        var speed = (double)_speedInput.Value;
+        var repeatCount = Math.Max(1, (int)_repeatCountInput.Value);
+        var speed = Math.Max(0.1, (double)_speedInput.Value);
         var iteration = 0;
 
         while (repeatForever || iteration < repeatCount)
@@ -489,6 +512,27 @@ public partial class MainForm : Form
         }
     }
 
+    private void ReleaseAnyHeldButtons()
+    {
+        if (_leftButtonPhysicallyDown)
+        {
+            MacroPlayer.LeftUp();
+            _leftButtonPhysicallyDown = false;
+        }
+
+        if (_middleButtonPhysicallyDown)
+        {
+            MacroPlayer.MiddleUp();
+            _middleButtonPhysicallyDown = false;
+        }
+
+        if (_rightButtonPhysicallyDown)
+        {
+            MacroPlayer.RightUp();
+            _rightButtonPhysicallyDown = false;
+        }
+    }
+
     private void OnLeftDown(Point location)
     {
         var elapsed = _stopwatch.ElapsedMilliseconds;
@@ -590,11 +634,39 @@ public partial class MainForm : Form
         _statusLabel.Text = $"Recording... {_recordedEvents.Count} events";
     }
 
+    protected override void OnFormClosing(FormClosingEventArgs e)
+    {
+        if (_isRecording || _isPlaying)
+        {
+            var activity = _isRecording ? "recording" : "playback";
+            var result = MessageBox.Show(
+                $"TinyMacro is currently doing {activity}. Stop and exit?",
+                "TinyMacro",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Warning);
+
+            if (result != DialogResult.Yes)
+            {
+                e.Cancel = true;
+                return;
+            }
+        }
+
+        base.OnFormClosing(e);
+    }
+
     protected override void OnFormClosed(FormClosedEventArgs e)
     {
         _mouseHook.Stop();
         _keyboardHook.Stop();
         _playbackCts?.Cancel();
+        ReleaseAnyHeldButtons();
+
+        if (_isPlaying)
+        {
+            MacroPlayer.EndHighResolutionTiming();
+        }
+
         base.OnFormClosed(e);
     }
 }
