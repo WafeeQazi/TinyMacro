@@ -21,14 +21,15 @@ public class KeyboardHook
         _proc = HookCallback;
     }
 
-    public void Start()
+    public bool Start()
     {
         if (_hookId != IntPtr.Zero)
-            return;
+            return true;
 
         using var curProcess = System.Diagnostics.Process.GetCurrentProcess();
         using var curModule = curProcess.MainModule!;
         _hookId = SetWindowsHookEx(WH_KEYBOARD_LL, _proc, GetModuleHandle(curModule.ModuleName), 0);
+        return _hookId != IntPtr.Zero;
     }
 
     public void Stop()
