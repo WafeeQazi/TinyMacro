@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 
 namespace TinyMacro;
 
@@ -6,6 +7,12 @@ public partial class MainForm : Form
 {
     private const int MinMoveIntervalMs = 40;
     private const int MinMoveDistancePx = 4;
+    private const int HotkeyIdRecord = 1;
+    private const int HotkeyIdPlay = 2;
+    private const int HotkeyIdStopPlayback = 3;
+    private const uint ModControl = 0x0002;
+    private const uint ModAlt = 0x0001;
+    private const int WM_HOTKEY = 0x0312;
 
     private MenuStrip _menuStrip = null!;
     private Button _recordButton = null!;
@@ -293,8 +300,46 @@ public partial class MainForm : Form
         }
     }
 
+    protected override void OnHandleCreated(EventArgs e)
+    {
+        base.OnHandleCreated(e);
+        RegisterHotKey(Handle, HotkeyIdRecord, ModControl | ModAlt, (uint)Keys.F9);
+        RegisterHotKey(Handle, HotkeyIdPlay, ModControl | ModAlt, (uint)Keys.F10);
+        RegisterHotKey(Handle, HotkeyIdStopPlayback, ModControl | ModAlt, (uint)Keys.F11);
+    }
+
+    protected override void WndProc(ref Message m)
+    {
+        if (m.Msg == WM_HOTKEY)
+        {
+            switch (m.WParam.ToInt32())
+            {
+                case HotkeyIdRecord:
+                    OnRecordButtonClicked(this, EventArgs.Empty);
+                    break;
+                case HotkeyIdPlay:
+                    OnPlayButtonClicked(this, EventArgs.Empty);
+                    break;
+                case HotkeyIdStopPlayback:
+                    OnStopPlaybackClicked(this, EventArgs.Empty);
+                    break;
+            }
+        }
+
+        base.WndProc(ref m);
+    }
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern bool RegisterHotKey(IntPtr hWnd, int id, uint fsModifiers, uint vk);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern bool UnregisterHotKey(IntPtr hWnd, int id);
+
     private void OnRecordButtonClicked(object? sender, EventArgs e)
     {
+        if (_isPlaying)
+            return;
+
         if (_isRecording)
         {
             StopRecording();
@@ -667,6 +712,9 @@ public partial class MainForm : Form
 
     protected override void OnFormClosed(FormClosedEventArgs e)
     {
+        UnregisterHotKey(Handle, HotkeyIdRecord);
+        UnregisterHotKey(Handle, HotkeyIdPlay);
+        UnregisterHotKey(Handle, HotkeyIdStopPlayback);
         _mouseHook.Stop();
         _keyboardHook.Stop();
         _playbackCts?.Cancel();
