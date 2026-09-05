@@ -8,6 +8,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>TinyMacro</RootNamespace>
     <AssemblyName>TinyMacro</AssemblyName>
+    <ApplicationIcon>TinyMacro.ico</ApplicationIcon>
   </PropertyGroup>
 
 </Project>
