@@ -56,7 +56,8 @@ public partial class MainForm : Form
     private void InitializeComponent()
     {
         Text = "TinyMacro";
-        ClientSize = new Size(240, 320);
+        Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
+        ClientSize = new Size(240, 350);
         FormBorderStyle = FormBorderStyle.FixedSingle;
         MaximizeBox = false;
         StartPosition = FormStartPosition.CenterScreen;
@@ -165,6 +166,17 @@ public partial class MainForm : Form
         };
         _stopPlaybackButton.Click += OnStopPlaybackClicked;
 
+        var playbackOptionsGroup = new GroupBox
+        {
+            Text = "Playback Options",
+            Dock = DockStyle.Top,
+            Height = 145
+        };
+
+        playbackOptionsGroup.Controls.Add(_stopPlaybackButton);
+        playbackOptionsGroup.Controls.Add(_speedPanel);
+        playbackOptionsGroup.Controls.Add(_repeatPanel);
+
         _statusLabel = new Label
         {
             Text = "Status: Idle",
@@ -183,9 +195,7 @@ public partial class MainForm : Form
         _menuStrip.Items.Add(fileMenu);
         MainMenuStrip = _menuStrip;
 
-        Controls.Add(_stopPlaybackButton);
-        Controls.Add(_speedPanel);
-        Controls.Add(_repeatPanel);
+        Controls.Add(playbackOptionsGroup);
         Controls.Add(_playButton);
         Controls.Add(_recordButton);
         Controls.Add(_macroNameLabel);
